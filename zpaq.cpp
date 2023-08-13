@@ -623,7 +623,7 @@ public:
   ~ArchiveBase() {
     if (aes) delete aes;
     if (fp!=FPNULL) fclose(fp);
-  }  
+  }
   bool isopen() {return fp!=FPNULL;}
 };
 
@@ -1037,7 +1037,7 @@ private:
   vector<string> onlyfiles; // list of prefixes to include
   const char* repack;       // -repack output file
   char new_password_string[32]; // -repack hashed password
-  bool reparseCopy;         // reparse files will be copied
+  bool followSymlink;       // -followsymlink option treat symlink as usuall dir or file
   const char* new_password; // points to new_password_string or NULL
   int summary;              // summary option if > 0, detailed if -1
   bool dotest;              // -test option
@@ -1097,7 +1097,6 @@ void Jidac::usage() {
 "       =[+-#^?]   List: exclude by comparison result.\n"
 "  -only files...  Include only matches (default: *).\n"
 "  -repack F [X]   Extract to new archive F with key X (default: none).\n"
-"  -reparseCopy    Reparse files will be COPIED (default: they are discarded).\n"
 "  -sN -summary N  List: show top N sorted by size. -1: show frag IDs.\n"
 "                  Add/Extract: if N > 0 show brief progress.\n"
 "  -test           Extract: verify but do not write files.\n"
@@ -1105,6 +1104,7 @@ void Jidac::usage() {
 "  -to out...      Rename files... to out... or all to out/all.\n"
 "  -until N        Roll back archive to N'th update or -N from end.\n"
 "  -until %s  Set date, roll back (UT, default time: 235959).\n"
+"  -followsymlink  Add: treat symlink as usuall dir or file, otherwise (default) ignore it.\n"
 #ifndef NDEBUG
 "Advanced options:\n"
 "  -fragment N     Use 2^N KiB average fragment size (default: 6).\n"
@@ -1176,7 +1176,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   method="";  // 0..5
   noattributes=false;
   repack=0;
-  reparseCopy = false;
+  followSymlink   = false;
   new_password=0;
   summary=0; // detailed: -1
   dotest=false;  // -test
@@ -1252,8 +1252,7 @@ int Jidac::doCommand(int argc, const char** argv) {
         new_password=new_password_string;
       }
     }
-    else if (opt == "-reparseCopy")
-      reparseCopy = true;
+    else if (opt == "-followsymlink  ") followSymlink   = true;
     else if (opt=="-summary" && i<argc-1) summary=atoi(argv[++i]);
     else if (opt[1]=='s') summary=atoi(argv[i]+2);
     else if (opt=="-test") dotest=true;
@@ -1648,7 +1647,7 @@ endblock:;
   }  // end while !done
   if (in.tell()>32*(password!=0) && !found_data)
     error("archive contains no data");
-  printf("%d versions, %u files, %u fragments, %1.6f MB\n", 
+  printf("%d versions, %u files, %u fragments, %1.6f MB\n",
       int(ver.size()-1), files, unsigned(ht.size())-1,
       block_offset/1000000.0);
 
@@ -1758,7 +1757,7 @@ wchar_t* Get_UNC_IfPossible(const char* path) {
 
     bool pathIsAbsolute;
     std::wstring sfilename2 = ConvertToUNC(utow(path), pathIsAbsolute);
-  
+
     if (lastUNCpath) {
         free(lastUNCpath);
         lastUNCpath = NULL;
@@ -1848,7 +1847,7 @@ void Jidac::scandir(string filename) {
 
     // Ignore links, the names "." and ".." or any unselected file
     t=wtou(ffd.cFileName);
-    if ((!reparseCopy && (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+    if ((!followSymlink   && (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
         || t=="." || t=="..") edate=0;  // don't add
     string fn=path(filename)+t;
 
@@ -1967,7 +1966,7 @@ public:
     empty.destroy();
     destroy_mutex(mutex);
     delete[] q;
-  }      
+  }
   void write(StringBuffer& s, const char* filename, string method,
              const char* comment=0);
   vector<int> csize;  // compressed block sizes
@@ -2160,7 +2159,7 @@ public:
       }
       ++htsize;
     }
-  }    
+  }
 };
 
 // Sort by sortkey, then by full path
@@ -3256,7 +3255,7 @@ int Jidac::extract() {
         printf("at %1.0f\n", ver[i].offset+.0);
         error("C block in weird format");
       }
-      memcpy(hdr+hsize-34, 
+      memcpy(hdr+hsize-34,
           "\x00\x00\x00\x00\x00\x00\x00\x00"  // csize = 0
           "\x00\x00\x00\x00"  // compressed data terminator
           "\xfd"  // start of hash marker
@@ -3761,7 +3760,7 @@ int Jidac::list() {
       "%1.6f MB of %1.6f MB (%d files) shown\n"
       "  -> %1.6f MB (%u refs to %u of %u frags) after dedupe\n"
       "  -> %1.6f MB compressed.\n",
-       usize/1000000.0, allsize/1000000.0, nfiles, 
+       usize/1000000.0, allsize/1000000.0, nfiles,
        ddsize/1000000.0, refs, nfrags, unsigned(ht.size())-1,
        (csize+dhsize-dcsize)/1000000.0);
   if (unknown_frags)
